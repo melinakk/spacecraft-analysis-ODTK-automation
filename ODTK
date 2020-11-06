@@ -1,0 +1,164 @@
+import os
+from odtk import Client, ClientException, ClientExceptionCodes
+
+# Make sure ODTK is running, with the HTTP server started (default port is 9393) before running this script
+# The following initializes the client to connect to ODTK at the default port
+client = Client()
+odtk = client.get_root()
+odtk_child_count = odtk.children.count
+
+########################### Create new scenario ###################################
+
+# The scenario is created in: C:\Users\YOGA C930\Documents\ODTK 6
+# Need to clear the folder before every new run.
+if odtk_child_count > 0:
+    # close scenario
+    odtk.application.deleteObject('', odtk.scenario[0])
+    print('Scenario closed.')
+odtk.application.createObj(odtk, 'Scenario', 'TestScenario')
+print('Scenario created.')
+
+# scenario properties
+
+# start time and time span.
+odtk.Scenario[0].DefaultTimes.Processes.StartMode = "StartTime"
+jd1 = odtk.NewDate(2459140.49999, "JDate")
+odtk.Scenario[0].DefaultTimes.Processes.StartTime = jd1
+odtk.Scenario[0].DefaultTimes.Processes.StopMode = "TimeSpan"
+odtk.Scenario[0].DefaultTimes.Processes.TimeSpan.set(720, 'hr')
+
+# import a new measurements file.
+measurement_list = odtk.scenario[0].Measurements
+measurement_list.Files.clear()
+new_file = measurement_list.Files.NewElem()
+new_file.Enabled = True
+new_file.FileName = 'C:/Users/YOGA C930/Documents/ODTK 6/TrackingData/ICEYE_TrkID(1000).e'
+measurement_list.Files.push_back(new_file)
+initial = odtk.NewDate(2459140.49999, "JDate")
+
+########################### Create new satellite ###################################
+mySatellite = odtk.application.createObj(odtk.scenario[0], 'Satellite', 'X2')
+
+# satellite's properties
+# Initial State
+mySatellite.OrbitState.CoordFrame = "Fixed"
+mySatellite.OrbitState.Epoch = initial
+mySatellite.OrbitState.XPosition.set(-3830.8626000000004, "Km")
+mySatellite.OrbitState.YPosition.set(969.6653200000001, "Km")
+mySatellite.OrbitState.ZPosition.set(5709.102220000001, "Km")
+mySatellite.OrbitState.XVelocity.set(-5.36816943, "Km*sec^-1")
+mySatellite.OrbitState.YVelocity.set(3.49699018, "Km*sec^-1")
+mySatellite.OrbitState.ZVelocity.set(-4.189351355, "Km*sec^-1")
+
+mySatellite.PhysicalProperties.Mass.set(84.52, "Kg")
+
+mySatellite.Attitude.CenterOfMassInBodyFrame.X.set(0.028234, "m")
+mySatellite.Attitude.CenterOfMassInBodyFrame.Y.set(-0.24313, "m")
+mySatellite.Attitude.CenterOfMassInBodyFrame.Z.set(0.10183, "m")
+
+mySatellite.ForceModel.Gravity.DegreeAndOrder = 71
+mySatellite.ForceModel.Gravity.Tides.SolidTides = True
+mySatellite.ForceModel.Gravity.Tides.OceanTides = True
+mySatellite.ForceModel.Gravity.VariationalEquations.Degree = 2
+mySatellite.ForceModel.Gravity.VariationalEquations.Order = 4
+mySatellite.ForceModel.Drag.AtmDensityModel = "Jacchia-Roberts"
+mySatellite.ForceModel.Drag.Model.CorrectionType = "Cd Additive"
+mySatellite.ForceModel.Drag.Model.CD = 1.8
+mySatellite.ForceModel.Drag.Model.Area.set(1.2, "m^2")
+mySatellite.ForceModel.Drag.DensityCorrInitialEstimate = -0.272262575795576
+mySatellite.ForceModel.SolarPressure.Model.Area.set(1.345, "m^2")
+mySatellite.ForceModel.SolarPressure.Model.CrModel.InitialEstimate = 0.3795911319209828
+mySatellite.ForceModel.CentralBodyRadiation.Albedo = True
+mySatellite.ForceModel.CentralBodyRadiation.ThermalRadiationPressure = True
+mySatellite.ForceModel.CentralBodyRadiation.Area.set(1.4, "m^2")
+mySatellite.EphemerisGeneration.CovarianceType = "Position Velocity 6x6 Covariance"
+
+
+########################### Create Tracking Instrument ###################################
+
+tracking = odtk.application.createObj(mySatellite, 'TrackingInstrument', 'TrackInstrument')
+print('tracking instrument created.')
+
+mstats = tracking.MeasurementStatistics
+mstats.clear()
+
+pos = mstats.InsertByName("Eph Pos")
+ms = mstats[mstats.count - 1]
+ms.Type.WhiteNoiseSigma.Set(20, "m")
+vel = mstats.InsertByName("Eph Vel")
+ms = mstats[mstats.count - 1]
+ms.Type.WhiteNoiseSigma.Set(0.1, "m*sec^-1")
+
+
+########################### Create Antenna ###################################
+
+antenna = odtk.application.createObj(tracking, 'Antenna', 'Antenna')
+
+antenna.PhaseCenterLocation.X.set(-0.0338, 'm')
+antenna.PhaseCenterLocation.Y.set(-0.027424, "m")
+antenna.PhaseCenterLocation.Z.set(-0.457794, "m")
+
+
+########################### Create Least Squares ###################################
+
+# create least squares
+ls = odtk.application.createObj(mySatellite, 'LeastSquares', 'LS1')
+print('least Squares created.')
+
+## Set stages time.
+start = odtk.NewDate(2459140.49999, "JDate")
+leastsquares_list = ls.Stages.NewElem()
+new_time1 = leastsquares_list.StartTime = start
+end = odtk.NewDate(2459140.70832, "JDate")
+leastsquares_list = ls.Stages.NewElem()
+new_time2 = leastsquares_list.StartTime = end
+
+ls.CustomDataEditing.Enabled = True
+schedule_list = ls.CustomDataEditing.Schedule.NewElem()
+new_schedule1 = schedule_list.Action = "Thin"
+new_schedule2 = schedule_list.ThinningTime.set(5, "min")
+
+########################### Create Filter ###################################
+
+
+# create filter
+filter1 = odtk.application.createObj(odtk.scenario[0], 'Filter', 'Fl')
+
+initial = odtk.NewDate(2459140.49999, "JDate")
+filter1.ProcessControl.StartMode = "Initial"
+filter1.ProcessControl.StartTime = initial
+filter1.ProcessControl.StopMode = "LastMeasurement"
+
+filter1.Output.STKEphemeris.CovarianceType = "Position Velocity 6x6 Covariance"
+filter1.Output.SmootherData.Generate = True
+
+filter1.Output.DataArchive.SaveCrossCorrelations = False
+filter1.Output.DataArchive.SaveOnlyLastMeasPerStep = False
+filter1.Output.DataArchive.OutputMeasHistory = False
+filter1.Output.DataArchive.OutputManeuvers = False
+filter1.Output.DataArchive.OutputEmpiricalForces = False
+filter1.Output.DataArchive.OutputSummary = False
+filter1.Output.DataArchive.OutputDataFiles = False
+filter1.Output.DataArchive.OutputHistograms = False
+
+
+########################### Create Smoother ###################################
+
+# set input files for smoother
+smoother1 = odtk.application.createObj(odtk.scenario[0], 'Smoother', 'Smth')
+print('filter & smoother created.')
+
+smoother_list = smoother1.Input
+new_smoother = smoother_list.Files.NewElem()
+new_smoother.Enabled = True
+new_smoother.FileName = 'C:/Users/YOGA C930/Documents/ODTK 6/Smoother/TestScenario_Fl.rough'
+smoother_list.Files.push_back(new_smoother)
+
+smoother1.Output.STKEphemeris.CovarianceType = "Position Velocity 6x6 Covariance"
+
+# Run Scenario
+ls.Go()
+filter1.Go()
+smoother1.Go()
+
+
